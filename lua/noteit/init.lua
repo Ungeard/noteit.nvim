@@ -63,6 +63,19 @@ function M.setup(opts)
     M.load_notes()
 end
 
+  -- Create autocmd to delete the file and folder if empty on exit
+  vim.api.nvim_create_autocmd("VimLeavePre", {
+    group = augroup,
+    callback = function()
+      if #M.notes == 0 then
+        local dir = vim.fn.fnamemodify(M.config.notes_file, ":h")
+
+        vim.fn.delete(M.config.notes_file)
+        vim.fn.delete(dir, "d")
+     end
+    end,
+  })
+
 ------------------------------------------------------------
 -- Window for a note
 ------------------------------------------------------------
@@ -204,20 +217,21 @@ end
 -- Persistence: Save and Load
 ------------------------------------------------------------
 function M.save_notes()
-    sync_all_loaded_notes()
-    local dir = vim.fn.fnamemodify(M.config.notes_file, ":h")
-    if vim.fn.mkdir(dir, "p") == 0 then
-        vim.notify("Notes: failed to create directory " .. dir, vim.log.levels.ERROR)
-        return
-    end
-    local json = vim.fn.json_encode(M.notes)
-    local f, err = io.open(M.config.notes_file, "w")
-    if f then
-        f:write(json)
-        f:close()
-    else
-        vim.notify("Notes: failed to save " .. M.config.notes_file .. " — " .. tostring(err), vim.log.levels.ERROR)
-    end
+  local dir = vim.fn.fnamemodify(M.config.notes_file, ":h")
+  if vim.fn.mkdir(dir, "p") == 0 then
+    vim.notify("Notes: failed to create directory " .. dir, vim.log.levels.ERROR)
+    return
+  end
+  sync_all_loaded_notes()
+
+  local json = vim.fn.json_encode(M.notes)
+  local f, err = io.open(M.config.notes_file, "w")
+  if f then
+    f:write(json)
+    f:close()
+  else
+    vim.notify("Notes: failed to save " .. M.config.notes_file .. " — " .. tostring(err), vim.log.levels.ERROR)
+  end
 end
 
 function M.load_notes()
