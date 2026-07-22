@@ -63,18 +63,18 @@ function M.setup(opts)
     M.load_notes()
 end
 
-  -- Create autocmd to delete the file and folder if empty on exit
-  vim.api.nvim_create_autocmd("VimLeavePre", {
+-- Create autocmd to delete the file and folder if empty on exit
+vim.api.nvim_create_autocmd("VimLeavePre", {
     group = augroup,
     callback = function()
-      if #M.notes == 0 then
-        local dir = vim.fn.fnamemodify(M.config.notes_file, ":h")
+        if #M.notes == 0 then
+            local dir = vim.fn.fnamemodify(M.config.notes_file, ":h")
 
-        vim.fn.delete(M.config.notes_file)
-        vim.fn.delete(dir, "d")
-     end
+            vim.fn.delete(M.config.notes_file)
+            vim.fn.delete(dir, "d")
+        end
     end,
-  })
+})
 
 ------------------------------------------------------------
 -- Window for a note
@@ -105,6 +105,50 @@ local function open_floating_window()
     return buf, win
 end
 
+----------------------------------------------------------
+-- Edit already existsing note
+----------------------------------------------------------
+function M.edit_note(note)
+    local current_buf = vim.api.nvim_get_current_buf()
+    local float_buf, float_win = open_floating_window()
+
+    -- Fill floating buffer with the existing note text
+    vim.api.nvim_buf_set_lines(float_buf, 0, -1, false, { note.note })
+
+    -- Move cursor to the end of the text and enter insert mode
+    local text_len = string.len(note.note)
+    vim.api.nvim_win_set_cursor(float_win, { 1, text_len })
+    vim.cmd("startinsert!")
+
+    -- Save changes on Enter
+    vim.keymap.set("i", "<CR>", function()
+        local lines = vim.api.nvim_buf_get_lines(float_buf, 0, -1, false)
+        local updated_text = table.concat(lines, " "):gsub("^%s*(.-)%s*$", "%1")
+
+        vim.api.nvim_win_close(float_win, true)
+        vim.cmd("stopinsert")
+
+        if updated_text ~= "" then
+            -- Update reference properties
+            note.note = updated_text
+            note.text = M.config.symbol .. " " .. updated_text
+
+            -- Redraw sign/extmark in the source buffer
+            place_note(current_buf, note)
+            M.save_notes()
+
+            vim.cmd("redraw")
+            vim.notify("Note updated", vim.log.levels.INFO)
+        end
+    end, { buffer = float_buf, silent = true })
+
+    -- Cancel changes on Escape
+    vim.keymap.set({ "n", "i" }, "<Esc>", function()
+        vim.api.nvim_win_close(float_win, true)
+        vim.cmd("stopinsert")
+    end, { buffer = float_buf, silent = true })
+end
+
 ------------------------------------------------------------
 -- Add a note at current line
 ------------------------------------------------------------
@@ -118,7 +162,7 @@ function M.add_note()
     -- Check if note already exists
     for _, note in ipairs(M.notes) do
         if note.filename == file and note.lnum == line then
-            vim.notify("Note already exists at this line", vim.log.levels.WARN)
+            M.edit_note(note)
             return
         end
     end
@@ -217,21 +261,21 @@ end
 -- Persistence: Save and Load
 ------------------------------------------------------------
 function M.save_notes()
-  local dir = vim.fn.fnamemodify(M.config.notes_file, ":h")
-  if vim.fn.mkdir(dir, "p") == 0 then
-    vim.notify("Notes: failed to create directory " .. dir, vim.log.levels.ERROR)
-    return
-  end
-  sync_all_loaded_notes()
+    local dir = vim.fn.fnamemodify(M.config.notes_file, ":h")
+    if vim.fn.mkdir(dir, "p") == 0 then
+        vim.notify("Notes: failed to create directory " .. dir, vim.log.levels.ERROR)
+        return
+    end
+    sync_all_loaded_notes()
 
-  local json = vim.fn.json_encode(M.notes)
-  local f, err = io.open(M.config.notes_file, "w")
-  if f then
-    f:write(json)
-    f:close()
-  else
-    vim.notify("Notes: failed to save " .. M.config.notes_file .. " — " .. tostring(err), vim.log.levels.ERROR)
-  end
+    local json = vim.fn.json_encode(M.notes)
+    local f, err = io.open(M.config.notes_file, "w")
+    if f then
+        f:write(json)
+        f:close()
+    else
+        vim.notify("Notes: failed to save " .. M.config.notes_file .. " — " .. tostring(err), vim.log.levels.ERROR)
+    end
 end
 
 function M.load_notes()
